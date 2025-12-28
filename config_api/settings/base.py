@@ -1,10 +1,14 @@
 from pathlib import Path
+import os
 
 # BASE
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # SECURITY
-SECRET_KEY = 'django-insecure-ia@4q%%6ro+53f^^cr!%g#0&*o96px68@+txg4et#$^(rr8kl&'
+SECRET_KEY = os.environ.get("SECRET_KEY")
+
+# CUSTOM USER MODEL
+AUTH_USER_MODEL = 'core.User'
 
 # APPS
 INSTALLED_APPS = [
@@ -20,6 +24,7 @@ INSTALLED_APPS = [
     'rest_framework',
 
     # Local apps
+    "apps.core"
 ]
 
 # MIDDLEWARE

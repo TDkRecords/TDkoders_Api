@@ -39,7 +39,7 @@ class SoftDeleteModel(models.Model):
         from django.utils import timezone
         self.is_deleted = True
         self.deleted_at = timezone.now()
-        self.save
+        self.save()
     
     def restore(self):
         self.is_deleted = False
