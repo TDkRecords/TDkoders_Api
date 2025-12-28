@@ -1,13 +1,53 @@
-from enum import unique
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from .base import TimeStampedModel, UUIDModel
 from .business import Business
 
+
+class UserManager(BaseUserManager):
+    """
+    Manager personalizado para el modelo User que usa email en lugar de username
+    """
+    def create_user(self, email, password=None, **extra_fields):
+        """
+        Crea y guarda un usuario con el email y password dados
+        """
+        if not email:
+            raise ValueError('El email es obligatorio')
+        
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        """
+        Crea y guarda un superusuario con el email y password dados
+        """
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('user_type', 'admin')
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser debe tener is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser debe tener is_superuser=True.')
+
+        return self.create_user(email, password, **extra_fields)
+
+
 class User(AbstractUser, TimeStampedModel, UUIDModel):
-    username = models.CharField(max_length=150, blank=True, null=True)
+    """
+    Usuario personalizado que usa email como identificador único
+    """
+    # Deshabilitar username de AbstractUser
+    username = None
+    
+    # Email como identificador único
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=20)
+    phone = models.CharField(max_length=20, blank=True)
     avatar = models.URLField(blank=True, help_text="URL de la imagen de perfil")
     
     # Tipos de usuarios
@@ -17,36 +57,55 @@ class User(AbstractUser, TimeStampedModel, UUIDModel):
         ('customer', 'Cliente'),
         ('admin', 'Administrador'),
     ]
-    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='customer')
+    user_type = models.CharField(
+        max_length=20, 
+        choices=USER_TYPE_CHOICES, 
+        default='customer'
+    )
     
     # Verificación
     email_verified = models.BooleanField(default=False)
     phone_verified = models.BooleanField(default=False)
     
-    # Configuración de autenticación
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ['first_name', 'last_name']
+    # Manager personalizado
+    objects = UserManager()
     
-    def __str__(self):
-        return self.username or self.email
+    # Configuración de autenticación
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['first_name', 'last_name']  # Campos requeridos además de email y password
     
     class Meta:
         db_table = 'users'
         verbose_name = "Usuario"
         verbose_name_plural = "Usuarios"
-        
         indexes = [
             models.Index(fields=['email']),
             models.Index(fields=['user_type']),
         ]
-        
+    
+    def __str__(self):
+        return self.email
+    
     @property
     def full_name(self):
+        """Retorna el nombre completo del usuario"""
         return f"{self.first_name} {self.last_name}".strip() or self.email
-    
+
+
 class BusinessMember(TimeStampedModel, UUIDModel):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='business_memberships')
-    business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name='members')
+    """
+    Relación entre un usuario y un negocio (membresía)
+    """
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='business_memberships'
+    )
+    business = models.ForeignKey(
+        Business, 
+        on_delete=models.CASCADE, 
+        related_name='members'
+    )
     
     # Roles
     ROLE_CHOICES = [
@@ -56,12 +115,16 @@ class BusinessMember(TimeStampedModel, UUIDModel):
         ('employee', 'Empleado'),
         ('cashier', 'Cajero'),
     ]
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='employee')
+    role = models.CharField(
+        max_length=20, 
+        choices=ROLE_CHOICES, 
+        default='employee'
+    )
     
-    # Permisos especificos
+    # Permisos específicos
     permissions = models.JSONField(
         default=dict, 
-        help_text="Diccionario de permisos específicos por módulo (ej: {'ventas': ['ver', 'crear'], 'inventario': ['ver']})"
+        help_text="Diccionario de permisos específicos por módulo"
     )
     
     # Estado del miembro
@@ -89,7 +152,6 @@ class BusinessMember(TimeStampedModel, UUIDModel):
         verbose_name_plural = "Miembros del Negocio"
         unique_together = ('user', 'business')
         ordering = ['role', 'user__first_name']
-        
         indexes = [
             models.Index(fields=['business', 'role']),
             models.Index(fields=['user', 'is_active']),
@@ -100,15 +162,25 @@ class BusinessMember(TimeStampedModel, UUIDModel):
     
     @property
     def is_admin(self):
+        """Verifica si el miembro es admin u owner"""
         return self.role in ['owner', 'admin']
     
     def has_permission(self, permission_key):
-        if self.is_owner:
+        """Verifica si el miembro tiene un permiso específico"""
+        if self.role == 'owner':
             return True
         return self.permissions.get(permission_key, False)
-        
+
+
 class Customer(TimeStampedModel, UUIDModel):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, help_text="Usuario asociado al cliente")
+    """
+    Cliente de un negocio específico
+    """
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        help_text="Usuario asociado al cliente"
+    )
     business = models.ForeignKey(
         Business,
         on_delete=models.CASCADE,
@@ -130,7 +202,7 @@ class Customer(TimeStampedModel, UUIDModel):
     )
     
     # Sistema de Lealtad
-    loyality_points = models.IntegerField(default=0)
+    loyalty_points = models.IntegerField(default=0)
     
     total_spent = models.DecimalField(
         max_digits=12,
@@ -139,7 +211,10 @@ class Customer(TimeStampedModel, UUIDModel):
         help_text="Total gastado por el cliente"
     )
     
-    total_orders = models.IntegerField(default=0, help_text="Número total de órdenes del cliente")
+    total_orders = models.IntegerField(
+        default=0, 
+        help_text="Número total de órdenes del cliente"
+    )
     
     # Estados
     is_vip = models.BooleanField(default=False, help_text="Si el cliente es VIP")
@@ -166,7 +241,6 @@ class Customer(TimeStampedModel, UUIDModel):
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
         unique_together = [['user', 'business']]
-        
         indexes = [
             models.Index(fields=['business', 'is_vip']),
             models.Index(fields=['business', 'total_spent']),
@@ -176,8 +250,9 @@ class Customer(TimeStampedModel, UUIDModel):
         return f"{self.user.full_name} @ {self.business.name}"
     
     def save(self, *args, **kwargs):
+        """Auto-genera customer_number si no existe"""
         if not self.customer_number:
-            last_customer  = Customer.objects.filter(
+            last_customer = Customer.objects.filter(
                 business=self.business
             ).order_by('-customer_number').first()
             
@@ -195,21 +270,21 @@ class Customer(TimeStampedModel, UUIDModel):
         
         super().save(*args, **kwargs)
     
-    # Agrega puntos de lealtad
     def add_loyalty_points(self, points):
+        """Agrega puntos de lealtad"""
         self.loyalty_points += points
         self.save(update_fields=['loyalty_points', 'updated_at'])
         
-    # Redime puntos de lealtad
     def redeem_loyalty_points(self, points):
+        """Redime puntos de lealtad"""
         if self.loyalty_points >= points:
             self.loyalty_points -= points
             self.save(update_fields=['loyalty_points', 'updated_at'])
             return True
         return False
     
-    # Actualiza estadísticas de compras
     def update_purchase_stats(self, order_total):
+        """Actualiza estadísticas de compras"""
         from django.utils import timezone
         
         self.total_spent += order_total
@@ -226,4 +301,3 @@ class Customer(TimeStampedModel, UUIDModel):
             'first_purchase_date',
             'updated_at'
         ])
-    
