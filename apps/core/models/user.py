@@ -90,6 +90,10 @@ class User(AbstractUser, TimeStampedModel, UUIDModel):
     def full_name(self):
         """Retorna el nombre completo del usuario"""
         return f"{self.first_name} {self.last_name}".strip() or self.email
+    
+    def get_short_name(self):
+        """Retorna el nombre corto del usuario"""
+        return self.first_name
 
 
 class BusinessMember(TimeStampedModel, UUIDModel):
