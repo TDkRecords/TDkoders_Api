@@ -17,5 +17,5 @@ router.register(r"attribute-values", views.AttributeValueViewSet)
 router.register(r"product-attributes", views.ProductAttributeViewSet)
 
 urlpatterns = [
-    path("api/", include(router.urls)),
+    path("core/", include(router.urls)),
 ]
