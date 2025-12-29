@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.authentication",
     "apps.inventory",
+    "apps.orders",
 ]
 
 # MIDDLEWARE

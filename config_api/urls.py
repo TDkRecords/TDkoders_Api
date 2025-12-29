@@ -23,4 +23,5 @@ urlpatterns = [
     path("", include("apps.core.urls")),
     path("auth/", include("apps.authentication.urls")),
     path("inventory/", include("apps.inventory.urls")),
+    path("orders/", include("apps.orders.urls")),
 ]
