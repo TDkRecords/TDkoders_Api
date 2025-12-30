@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from apps.core.models.base import TimeStampedModel, UUIDModel, SoftDeleteModel
 from apps.core.models import Business, User, Customer, Product
 
@@ -190,6 +192,57 @@ class Reservation(TimeStampedModel, UUIDModel, SoftDeleteModel):
 
     def __str__(self):
         return f"{self.reservation_number} - {self.start_datetime.strftime('%Y-%m-%d %H:%M')}"
+
+    def clean(self):
+        """Validar antes de guardar"""
+        super().clean()
+
+        # Validar fechas
+        if self.end_datetime <= self.start_datetime:
+            raise ValidationError(
+                {"end_datetime": "La hora de fin debe ser posterior a la de inicio"}
+            )
+
+        # Validar que no haya solapamiento con otras reservas
+        if self.service_provider:
+            overlapping = Reservation.objects.filter(
+                service_provider=self.service_provider,
+                status__in=["pending", "confirmed", "in_progress"],
+                start_datetime__lt=self.end_datetime,
+                end_datetime__gt=self.start_datetime,
+            ).exclude(pk=self.pk)
+
+            if overlapping.exists():
+                raise ValidationError(
+                    {
+                        "start_datetime": "El proveedor ya tiene una reserva en este horario"
+                    }
+                )
+
+    @transaction.atomic
+    def confirm_reservation(self, user):
+        """Confirmar reserva"""
+        from django.utils import timezone
+
+        if self.status != "pending":
+            raise ValidationError("Solo se pueden confirmar reservas pendientes")
+
+        # Verificar depósito si es requerido
+        if self.requires_deposit and not self.deposit_paid:
+            raise ValidationError("Se requiere el pago del depósito para confirmar")
+
+        self.status = "confirmed"
+        self.confirmed_at = timezone.now()
+        self.confirmed_by = user
+        self.save()
+
+        # Registrar en historial
+        ReservationStatusHistory.objects.create(
+            reservation=self,
+            previous_status="pending",
+            new_status="confirmed",
+            changed_by=user,
+        )
 
     def save(self, *args, **kwargs):
         """Auto-genera reservation_number"""

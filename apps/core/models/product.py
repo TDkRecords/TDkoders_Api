@@ -1,6 +1,8 @@
 # apps/core/models/product.py
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.text import slugify
 from .base import TimeStampedModel, UUIDModel, SoftDeleteModel
 from .business import Business
@@ -8,37 +10,35 @@ from .business import Business
 
 class Category(TimeStampedModel, UUIDModel):
     business = models.ForeignKey(
-        Business,
-        on_delete=models.CASCADE,
-        related_name='categories'
+        Business, on_delete=models.CASCADE, related_name="categories"
     )
     name = models.CharField(max_length=100)
     slug = models.SlugField(max_length=100, blank=True)
     description = models.TextField(blank=True)
-    
+
     # Jerarquía (categorías anidadas)
     parent = models.ForeignKey(
-        'self',  # ← Self-reference para categorías anidadas
+        "self",  # ← Self-reference para categorías anidadas
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='subcategories'
+        related_name="subcategories",
     )
-    
+
     # Orden de visualización
     order = models.IntegerField(default=0)
-    
+
     # Estado
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        db_table = 'categories'
-        verbose_name = 'Categoría'
-        verbose_name_plural = 'Categorías'
-        unique_together = [['business', 'slug']]
-        ordering = ['order', 'name']
+        db_table = "categories"
+        verbose_name = "Categoría"
+        verbose_name_plural = "Categorías"
+        unique_together = [["business", "slug"]]
+        ordering = ["order", "name"]
         indexes = [
-            models.Index(fields=['business', 'is_active']),
+            models.Index(fields=["business", "is_active"]),
         ]
 
     def __str__(self):
@@ -54,110 +54,94 @@ class Category(TimeStampedModel, UUIDModel):
 
 class Product(TimeStampedModel, UUIDModel, SoftDeleteModel):
     business = models.ForeignKey(
-        Business,
-        on_delete=models.CASCADE,
-        related_name='products'
+        Business, on_delete=models.CASCADE, related_name="products"
     )
     category = models.ForeignKey(
         Category,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='products'
+        related_name="products",
     )
-    
+
     # Información básica
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, blank=True)
     description = models.TextField(blank=True)
-    
+
     # Tipo de producto
     PRODUCT_TYPE_CHOICES = [
-        ('physical', 'Physical Product'),
-        ('service', 'Service'),
-        ('digital', 'Digital Product'),
+        ("physical", "Physical Product"),
+        ("service", "Service"),
+        ("digital", "Digital Product"),
     ]
     product_type = models.CharField(
-        max_length=20,
-        choices=PRODUCT_TYPE_CHOICES,
-        default='physical'
+        max_length=20, choices=PRODUCT_TYPE_CHOICES, default="physical"
     )
-    
+
     # ¿Es un servicio? (para reservas)
     is_service = models.BooleanField(
-        default=False,
-        help_text="Si es True, este producto puede ser reservado"
+        default=False, help_text="Si es True, este producto puede ser reservado"
     )
-    
+
     # Duración del servicio
     service_duration_minutes = models.IntegerField(
         null=True,
         blank=True,
-        help_text="Duración en minutos (ej: 30 para corte de pelo)"
+        help_text="Duración en minutos (ej: 30 para corte de pelo)",
     )
-    
+
     # SKU base
     sku = models.CharField(
-        max_length=100,
-        blank=True,
-        help_text="SKU base del producto"
+        max_length=100, blank=True, help_text="SKU base del producto"
     )
-    
+
     # Imágenes
     image_url = models.URLField(
-        blank=True,
-        help_text="URL de la imagen principal en S3"
+        blank=True, help_text="URL de la imagen principal en S3"
     )
     images = models.JSONField(
-        default=list,
-        blank=True,
-        help_text='Lista de URLs de imágenes adicionales'
+        default=list, blank=True, help_text="Lista de URLs de imágenes adicionales"
     )
-    
+
     # Precio base (si NO tiene variantes)
     base_price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0.00,
-        validators=[MinValueValidator(0)]
+        max_digits=10, decimal_places=2, default=0.00, validators=[MinValueValidator(0)]
     )
-    
+
     # Inventario (solo si NO tiene variantes)
     track_inventory = models.BooleanField(
-        default=True,
-        help_text="¿Controlar inventario para este producto?"
+        default=True, help_text="¿Controlar inventario para este producto?"
     )
     stock_quantity = models.IntegerField(
-        default=0,
-        help_text="Cantidad en stock (solo si no tiene variantes)"
+        default=0, help_text="Cantidad en stock (solo si no tiene variantes)"
     )
-    
+
     # ¿Tiene variantes?
     has_variants = models.BooleanField(
         default=False,
-        help_text="Si True, el producto tiene variantes (tallas, colores, etc)"
+        help_text="Si True, el producto tiene variantes (tallas, colores, etc)",
     )
-    
+
     # Estado
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(
-        default=False,
-        help_text="¿Mostrar como destacado?"
+        default=False, help_text="¿Mostrar como destacado?"
     )
-    
+
     # SEO
     meta_title = models.CharField(max_length=255, blank=True)
     meta_description = models.TextField(blank=True)
 
     class Meta:
-        db_table = 'products'
-        verbose_name = 'Producto'
-        verbose_name_plural = 'Productos'
-        unique_together = [['business', 'slug']]
+        db_table = "products"
+        verbose_name = "Producto"
+        verbose_name_plural = "Productos"
+        unique_together = [["business", "slug"]]
         indexes = [
-            models.Index(fields=['business', 'is_active']),
-            models.Index(fields=['business', 'category']),
-            models.Index(fields=['sku']),
+            models.Index(fields=["business", "is_active"]),
+            models.Index(fields=["business", "category"]),
+            models.Index(fields=["sku"]),
         ]
 
     def __str__(self):
@@ -169,10 +153,7 @@ class Product(TimeStampedModel, UUIDModel, SoftDeleteModel):
             base_slug = slugify(self.name)
             slug = base_slug
             counter = 1
-            while Product.objects.filter(
-                business=self.business,
-                slug=slug
-            ).exists():
+            while Product.objects.filter(business=self.business, slug=slug).exists():
                 slug = f"{base_slug}-{counter}"
                 counter += 1
             self.slug = slug
@@ -183,14 +164,11 @@ class Product(TimeStampedModel, UUIDModel, SoftDeleteModel):
         """Verifica si hay stock disponible"""
         if not self.track_inventory:
             return True
-        
+
         # Si tiene variantes, verificar si alguna tiene stock
         if self.has_variants:
-            return self.variants.filter(
-                is_active=True,
-                stock_quantity__gt=0
-            ).exists()
-        
+            return self.variants.filter(is_active=True, stock_quantity__gt=0).exists()
+
         return self.stock_quantity > 0
 
     @property
@@ -204,42 +182,34 @@ class Product(TimeStampedModel, UUIDModel, SoftDeleteModel):
 
 class ProductVariant(TimeStampedModel, UUIDModel, SoftDeleteModel):
     product = models.ForeignKey(
-        Product,
-        on_delete=models.CASCADE,
-        related_name='variants'
+        Product, on_delete=models.CASCADE, related_name="variants"
     )
-    
+
     # Identificación
     name = models.CharField(
-        max_length=255,
-        help_text="Nombre de la variante (ej: 'Talla M - Color Rojo')"
+        max_length=255, help_text="Nombre de la variante (ej: 'Talla M - Color Rojo')"
     )
     sku = models.CharField(
-        max_length=100,
-        unique=True,
-        help_text="SKU único de la variante"
+        max_length=100, unique=True, help_text="SKU único de la variante"
     )
-    
+
     # CAMPO CLAVE: Atributos flexibles
     # Este es el CORE del sistema agnóstico
     # Almacena los atributos específicos de esta variante en formato JSON
     # Ejemplo: {"Talla": "M", "Color": "Azul"} para ropa
     attributes = models.JSONField(
-        default=dict,
-        help_text='Atributos específicos de esta variante'
+        default=dict, help_text="Atributos específicos de esta variante"
     )
     # Ejemplos:
     # Ropa: {"Talla": "M", "Color": "Azul"}
     # Alimentos: {"Peso": "500g", "Marca": "Diana"}
     # Servicios: {"Duración": "30min", "Barbero": "Juan"}
-    
+
     # Precio
     price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(0)]
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(0)]
     )
-    
+
     # Precio de comparación (para descuentos)
     compare_at_price = models.DecimalField(
         max_digits=10,
@@ -247,9 +217,9 @@ class ProductVariant(TimeStampedModel, UUIDModel, SoftDeleteModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
-        help_text="Precio antes del descuento"
+        help_text="Precio antes del descuento",
     )
-    
+
     # Costo (para margen)
     cost_price = models.DecimalField(
         max_digits=10,
@@ -257,39 +227,34 @@ class ProductVariant(TimeStampedModel, UUIDModel, SoftDeleteModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
-        help_text="Costo de adquisición"
+        help_text="Costo de adquisición",
     )
-    
+
     # Inventario
-    stock_quantity = models.IntegerField(
-        default=0,
-        help_text="Cantidad disponible"
-    )
-    
+    stock_quantity = models.IntegerField(default=0, help_text="Cantidad disponible")
+
     # Imagen específica
     image_url = models.URLField(
-        blank=True,
-        help_text="URL de imagen específica para esta variante"
+        blank=True, help_text="URL de imagen específica para esta variante"
     )
-    
+
     # Estado
     is_active = models.BooleanField(default=True)
     is_default = models.BooleanField(
-        default=False,
-        help_text="¿Es la variante por defecto?"
+        default=False, help_text="¿Es la variante por defecto?"
     )
-    
+
     # Orden
     order = models.IntegerField(default=0)
 
     class Meta:
-        db_table = 'product_variants'
-        verbose_name = 'Variante de Producto'
-        verbose_name_plural = 'Variantes de Productos'
-        ordering = ['order', 'name']
+        db_table = "product_variants"
+        verbose_name = "Variante de Producto"
+        verbose_name_plural = "Variantes de Productos"
+        ordering = ["order", "name"]
         indexes = [
-            models.Index(fields=['product', 'is_active']),
-            models.Index(fields=['sku']),
+            models.Index(fields=["product", "is_active"]),
+            models.Index(fields=["sku"]),
         ]
 
     def __str__(self):
@@ -322,7 +287,7 @@ class ProductVariant(TimeStampedModel, UUIDModel, SoftDeleteModel):
         if self.product.track_inventory:
             if self.stock_quantity >= quantity:
                 self.stock_quantity -= quantity
-                self.save(update_fields=['stock_quantity', 'updated_at'])
+                self.save(update_fields=["stock_quantity", "updated_at"])
                 return True
             return False
         return True
@@ -331,4 +296,31 @@ class ProductVariant(TimeStampedModel, UUIDModel, SoftDeleteModel):
     def add_stock(self, quantity):
         if self.product.track_inventory:
             self.stock_quantity += quantity
-            self.save(update_fields=['stock_quantity', 'updated_at'])
+            self.save(update_fields=["stock_quantity", "updated_at"])
+
+    def clean(self):
+        """Validar antes de guardar"""
+        super().clean()
+
+        # Validar que el producto tenga has_variants=True
+        if not self.product.has_variants:
+            raise ValidationError({"product": "Este producto no acepta variantes"})
+
+        # Validar que los atributos en JSON sean válidos
+        if self.attributes:
+            product_attributes = self.product.product_attributes.values_list(
+                "attribute__name", flat=True
+            )
+
+            for attr_name in self.attributes.keys():
+                if attr_name not in product_attributes:
+                    raise ValidationError(
+                        {
+                            "attributes": f'El atributo "{attr_name}" no está configurado para este producto'
+                        }
+                    )
+
+    def save(self, *args, **kwargs):
+        # Validar antes de guardar
+        self.clean()
+        super().save(*args, **kwargs)

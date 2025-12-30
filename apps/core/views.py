@@ -1,4 +1,5 @@
 from rest_framework import viewsets
+from .permissions import IsBusinessMemberOrReadOnly, BusinessFilterMixin
 from .serializers import (
     UserSerializer,
     BusinessMemberSerializer,
@@ -66,9 +67,27 @@ class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
 
 
-class ProductViewSet(viewsets.ModelViewSet):
-    serializer_class = ProductSerializer
+class ProductViewSet(BusinessFilterMixin, viewsets.ModelViewSet):
     queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [IsBusinessMemberOrReadOnly]
+
+    def perform_create(self, serializer):
+        # Verificar que el usuario tenga permiso en este business
+        business_id = self.request.data.get("business")
+        from apps.core.models import BusinessMember
+
+        if not BusinessMember.objects.filter(
+            business_id=business_id,
+            user=self.request.user,
+            is_active=True,
+            role__in=["owner", "admin", "manager"],
+        ).exists():
+            raise PermissionDenied(
+                "No tienes permiso para crear productos en este negocio"
+            )
+
+        serializer.save()
 
 
 class ProductVariantViewSet(viewsets.ModelViewSet):

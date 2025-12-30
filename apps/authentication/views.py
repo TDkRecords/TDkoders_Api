@@ -44,14 +44,11 @@ class AuthViewSet(viewsets.ViewSet):
     # 🔑 LOGIN
     @action(detail=False, methods=["post"], permission_classes=[permissions.AllowAny])
     def login(self, request):
-        serializer = LoginSerializer(data=request.data)
+        serializer = LoginSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
 
-        try:
-            serializer.is_valid(raise_exception=True)
-        except TokenError as e:
-            raise InvalidToken(e.args[0])
-
-        user = serializer.user
+        # Ahora validated_data SÍ tiene user, refresh, access
+        user = serializer.validated_data["user"]
 
         return Response(
             {

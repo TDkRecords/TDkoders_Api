@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from apps.core.models.base import TimeStampedModel, UUIDModel, SoftDeleteModel
 from apps.core.models import Business, User, Customer, Product, ProductVariant
 from apps.inventory.models import Warehouse
@@ -146,6 +148,71 @@ class Order(TimeStampedModel, UUIDModel, SoftDeleteModel):
 
     def __str__(self):
         return f"{self.order_number} - {self.get_status_display()}"
+
+    def clean(self):
+        """Validar antes de guardar"""
+        super().clean()
+
+        # Validar que el warehouse pertenezca al business
+        if self.warehouse and self.warehouse.business != self.business:
+            raise ValidationError(
+                {"warehouse": "La bodega debe pertenecer al mismo negocio"}
+            )
+
+        # Validar que el customer pertenezca al business
+        if self.customer and self.customer.business != self.business:
+            raise ValidationError(
+                {"customer": "El cliente debe pertenecer al mismo negocio"}
+            )
+
+    @transaction.atomic
+    def mark_as_confirmed(self, user):
+        """Confirmar orden y reservar stock"""
+        from django.utils import timezone
+
+        if self.status != "pending":
+            raise ValidationError("Solo se pueden confirmar órdenes pendientes")
+
+        # Verificar stock disponible
+        for item in self.items.all():
+            if item.product.track_inventory:
+                if item.product.has_variants:
+                    if not item.variant:
+                        raise ValidationError(
+                            f"El producto {item.product.name} requiere una variante"
+                        )
+                    if item.variant.stock_quantity < item.quantity:
+                        raise ValidationError(
+                            f"Stock insuficiente para {item.variant.name}"
+                        )
+                else:
+                    if item.product.stock_quantity < item.quantity:
+                        raise ValidationError(
+                            f"Stock insuficiente para {item.product.name}"
+                        )
+
+        # Reservar stock
+        for item in self.items.all():
+            if item.product.track_inventory:
+                if item.product.has_variants:
+                    item.variant.deduct_stock(item.quantity)
+                else:
+                    item.product.stock_quantity -= item.quantity
+                    item.product.save(update_fields=["stock_quantity"])
+
+        # Actualizar estado
+        self.status = "confirmed"
+        self.confirmed_at = timezone.now()
+        self.save(update_fields=["status", "confirmed_at", "updated_at"])
+
+        # Registrar en historial
+        OrderStatusHistory.objects.create(
+            order=self,
+            previous_status="pending",
+            new_status="confirmed",
+            changed_by=user,
+            notes="Orden confirmada y stock reservado",
+        )
 
     def save(self, *args, **kwargs):
         """Auto-genera order_number"""
@@ -294,8 +361,26 @@ class OrderItem(TimeStampedModel, UUIDModel):
         variant_name = f" - {self.variant.name}" if self.variant else ""
         return f"{self.product.name}{variant_name} (x{self.quantity})"
 
+    def clean(self):
+        """Validar antes de guardar"""
+        super().clean()
+
+        # Si el producto tiene variantes, debe especificarse una
+        if self.product.has_variants and not self.variant:
+            raise ValidationError(
+                {"variant": "Este producto requiere seleccionar una variante"}
+            )
+
+        # Si se especifica variante, debe pertenecer al producto
+        if self.variant and self.variant.product != self.product:
+            raise ValidationError(
+                {"variant": "La variante no pertenece al producto seleccionado"}
+            )
+
     def save(self, *args, **kwargs):
-        """Calcula totales automáticamente"""
+        # Validar antes de guardar
+        self.clean()
+        # Calcula totales automáticamente
         # Subtotal = precio × cantidad
         self.subtotal = self.unit_price * self.quantity
 
@@ -314,6 +399,9 @@ class OrderItem(TimeStampedModel, UUIDModel):
         self.total = base_for_tax + self.tax_amount
 
         super().save(*args, **kwargs)
+        # Recalcular totales de la orden
+        if self.order_id:
+            self.order.calculate_totals()
 
 
 class OrderStatusHistory(TimeStampedModel, UUIDModel):
