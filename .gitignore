@@ -1,3 +1,10 @@
+# Database
+db.sqlite3
+db.sqlite3-journal
+*.db
+db.sqlite3.backup
+db.sqlite3.backup.*
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -5,6 +12,7 @@ build/
 dist/
 wheels/
 *.egg-info
+db.sqlite3
 
 # Virtual environments
 .venv
@@ -16,11 +24,6 @@ ENV/
 .env
 .env.local
 .env.*.local
-
-# Database
-db.sqlite3
-db.sqlite3-journal
-*.db
 
 # Django stuff
 *.log
