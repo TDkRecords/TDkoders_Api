@@ -8,15 +8,6 @@ from apps.inventory.models import Warehouse
 
 
 class Order(TimeStampedModel, UUIDModel, SoftDeleteModel):
-    """
-    Orden de compra/venta.
-
-    ¿Para qué?
-    - Registro de todas las ventas del negocio
-    - Puede ser venta en tienda, online, o telefónica
-    - Incluye productos, cantidades, precios, descuentos, impuestos
-    """
-
     ORDER_STATUS_CHOICES = [
         ("draft", "Borrador"),
         ("pending", "Pendiente"),

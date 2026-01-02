@@ -50,11 +50,21 @@ class AuthViewSet(viewsets.ViewSet):
         # Ahora validated_data SÍ tiene user, refresh, access
         user = serializer.validated_data["user"]
 
+        # Obtener negocios del usuario
+        from apps.core.models import BusinessMember
+
+        businesses = (
+            BusinessMember.objects.filter(user=user, is_active=True)
+            .select_related("business")
+            .values("business__id", "business__name", "business__slug", "role")
+        )
+
         return Response(
             {
                 "user": UserSerializer(user).data,
                 "refresh": serializer.validated_data["refresh"],
                 "access": serializer.validated_data["access"],
+                "businesses": list(businesses),  # ← Esto es CLAVE para el frontend
             },
             status=status.HTTP_200_OK,
         )

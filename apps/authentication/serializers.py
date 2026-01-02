@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 from apps.core.models import User
 
 
@@ -57,17 +58,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    """
-    Serializer para login de usuarios
-    """
-
     email = serializers.EmailField(required=True)
     password = serializers.CharField(
         required=True, write_only=True, style={"input_type": "password"}
     )
 
     def validate(self, attrs):
-        """Validar credenciales"""
+        # Validar credenciales
         email = attrs.get("email")
         password = attrs.get("password")
 
@@ -89,7 +86,12 @@ class LoginSerializer(serializers.Serializer):
                     "Esta cuenta está desactivada", code="authorization"
                 )
 
+            refresh = RefreshToken.for_user(user)
+
             attrs["user"] = user
+            attrs["refresh"] = str(refresh)
+            attrs["access"] = str(refresh.access_token)
+
             return attrs
         else:
             raise serializers.ValidationError(
