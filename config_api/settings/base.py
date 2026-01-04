@@ -11,6 +11,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # SECURITY
 SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY no configurada en variables de entorno")
 
 # CUSTOM USER MODEL
 AUTH_USER_MODEL = "core.User"
