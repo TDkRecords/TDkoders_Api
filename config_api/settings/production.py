@@ -1,6 +1,7 @@
 from .base import *
 import os
 import dotenv
+import dj_database_url
 
 dotenv.load_dotenv()
 
@@ -12,11 +13,11 @@ ALLOWED_HOSTS = ["api.tdkoders.online"]
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": os.environ.get("DB_NAME"),
-        "USER": os.environ.get("DB_USER"),
-        "PASSWORD": os.environ.get("DB_PASSWORD"),
-        "HOST": os.environ.get("DB_HOST"),
-        "PORT": os.environ.get("DB_PORT"),
+        "NAME": os.environ.get("PGDATABASE"),
+        "USER": os.environ.get("PGUSER"),
+        "PASSWORD": os.environ.get("PGPASSWORD"),
+        "HOST": os.environ.get("PGHOST"),
+        "PORT": os.environ.get("PGPORT", "5432"),
         "OPTIONS": {
             "sslmode": "require",
         },
