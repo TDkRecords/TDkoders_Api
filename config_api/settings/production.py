@@ -31,4 +31,5 @@ CORS_ALLOWED_ORIGINS = [
 # Quien puede enviar cookies y demás data al api (incluye credenciales)
 CSRF_TRUSTED_ORIGINS = [
     "https://tdkoders.online",
+    "https://api.tdkoders.online",
 ]
