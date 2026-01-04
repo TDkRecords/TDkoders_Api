@@ -1,7 +1,6 @@
 from .base import *
 import os
 import dotenv
-import dj_database_url
 
 dotenv.load_dotenv()
 
