@@ -1,6 +1,7 @@
 from .base import *
 import os
 import dotenv
+import dj_database_url
 
 dotenv.load_dotenv()
 
@@ -9,7 +10,7 @@ DEBUG = False
 # Donde vive el api
 ALLOWED_HOSTS = ["api.tdkoders.online"]
 
-DATABASES = {
+""" DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": os.environ.get("PGDATABASE"),
@@ -21,6 +22,14 @@ DATABASES = {
             "sslmode": "require",
         },
     }
+} """
+
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.environ.get("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True,
+    )
 }
 
 # Quien puede llamar al api
